@@ -1,0 +1,10 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.btn-primary {
+  @apply bg-brand-primary text-white;
+}
+.tab-active {
+  @apply bg-brand-accent;
+}
