@@ -1,77 +1,86 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import Link from "next/link";
+
+
+/** ===== Types ===== */
+type ReservationType = 'today' | 'advance' | 'both';
+type ApiCategory = 'all' | 'soft' | 'hard';
 
 interface Product {
   id: number;
   name: string;
   price: number;
-  image: string;
-  category: string;
-  reservationType: 'today' | 'advance' | 'both';
-  todayStock: number;
-  advanceStock: number;
+  image: string | null;
+  category: 'ソフト系' | 'ハード系' | string;
+  reservation_type: ReservationType;
+  today_stock: number;
+  advance_stock: number;
 }
 
-export default function ProductManagement() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [isLoading, setIsLoading] = useState(true);
+/** ===== Helpers ===== */
+const apiCategoryFromSelected = (selected: string): ApiCategory => {
+  if (selected === 'ソフト系' || selected === 'soft') return 'soft';
+  if (selected === 'ハード系' || selected === 'hard') return 'hard';
+  return 'all';
+};
+// 予約タイプの表示ラベル
+const reserveLabel = (t: ReservationType) =>
+  t === 'today' ? '当日' : t === 'advance' ? '事前' : '両方';
 
-  // データベースから商品データを取得
+const normalize = (p: any): Product => ({
+  id: Number(p.id),
+  name: String(p.name ?? ''),
+  price: Number(p.price ?? 0),
+  image: (p.image_url ?? p.image ?? null) as string | null,
+  category: (p.category ?? '') as any,
+  reservation_type: (p.reservation_type ?? p.reservationType ?? 'both') as ReservationType,
+  today_stock: Number(p.today_stock ?? p.todayStock ?? 0),
+  advance_stock: Number(p.advance_stock ?? p.advanceStock ?? 0),
+});
+
+export default function ProductManagement() {
+  /** ===== State ===== */
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isBulkLoading, setIsBulkLoading] = useState(false);
+
+  const [selectedCategory, setSelectedCategory] = useState<string>('すべて');
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // 編集モーダル用
+  const [editTarget, setEditTarget] = useState<Product | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    price: 0,
+    category: 'ソフト系',
+    reservation_type: 'both' as ReservationType,
+    today_stock: 0,
+    advance_stock: 0,
+  });
+
+  /** ===== Fetch products ===== */
   const fetchProducts = async () => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/get-products`, {
+      setIsLoading(true);
+      const url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/get-products`;
+      const res = await fetch(url, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('商品データの取得に失敗しました');
-      }
-
-      const result = await response.json();
-      setProducts(result.data || []);
-      setIsLoading(false);
-    } catch (error) {
-      console.error('商品データ取得エラー:', error);
-      setIsLoading(false);
-    }
-  };
-
-  // 商品の在庫を更新
-  const updateProductStock = async (productId: number, todayStock: number, advanceStock: number) => {
-    try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/update-product`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`
+          Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
         },
-        body: JSON.stringify({
-          productId,
-          updateData: { todayStock, advanceStock }
-        })
       });
-
-      if (!response.ok) {
-        throw new Error('商品データの更新に失敗しました');
-      }
-
-      // ローカルの状態も更新
-      setProducts(prev => prev.map(p => 
-        p.id === productId 
-          ? { ...p, todayStock, advanceStock }
-          : p
-      ));
-
-      return true;
-    } catch (error) {
-      console.error('商品更新エラー:', error);
-      return false;
+      if (!res.ok) throw new Error('failed to fetch products');
+      const json = await res.json();
+      const rows: any[] = Array.isArray(json.data) ? json.data : [];
+      setProducts(rows.map(normalize));
+    } catch (e) {
+      console.error(e);
+      setProducts([]);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -79,439 +88,325 @@ export default function ProductManagement() {
     fetchProducts();
   }, []);
 
-  const getInitialProducts = (): Product[] => [
-    // ソフト系
-    { id: 1, name: 'くるみぱん', price: 173, image: 'https://d1umvcecpsu7ql.cloudfront.net/storage/uploads/products/ZxjxLyytORue1foPjDwFbRCvcj6eXDWYmqvahUre.jpg?w=512', category: 'ソフト系', reservationType: 'both', todayStock: 8, advanceStock: 7 },
-    { id: 2, name: 'ぶどうぱん', price: 173, image: 'https://d1umvcecpsu7ql.cloudfront.net/storage/uploads/products/zfu8QOrZy6gPLPWYLfQlJHTyvOw6CrSXN1ByXIdr.jpg?w=512', category: 'ソフト系', reservationType: 'both', todayStock: 6, advanceStock: 6 },
-    { id: 3, name: 'クランベリークリームチーズ', price: 291, image: 'https://d1umvcecpsu7ql.cloudfront.net/storage/uploads/products/805LRi3WtYU6uQG4MaTlO7GVUa1RxJ2vg7t1R7KD.png?w=512', category: 'ソフト系', reservationType: 'both', todayStock: 3, advanceStock: 5 },
-    { id: 4, name: '小倉ほいっぷ', price: 281, image: 'https://d1umvcecpsu7ql.cloudfront.net/storage/uploads/products/ni99PvZarExik5B9HAAeMvy6SIWO3r2ngjOb8dv5.jpg?w=512', category: 'ソフト系', reservationType: 'both', todayStock: 4, advanceStock: 6 },
-    { id: 5, name: 'あんぱん', price: 259, image: 'https://d1umvcecpsu7ql.cloudfront.net/storage/uploads/products/dDCFbMWQ5TunuH5vRDmmY3Pp20zjGF5K82hm6iXA.jpg?w=512', category: 'ソフト系', reservationType: 'both', todayStock: 0, advanceStock: 0 },
-    { id: 6, name: 'ゆずあんぱん', price: 281, image: 'https://d1umvcecpsu7ql.cloudfront.net/storage/uploads/products/1Rc342FgG9BL69mdCDxQFWKH9m8gqwbDa5SB8A0W.jpg?w=512', category: 'ソフト系', reservationType: 'both', todayStock: 2, advanceStock: 4 },
-    { id: 7, name: 'まるぱん', price: 137, image: 'https://d1umvcecpsu7ql.cloudfront.net/storage/uploads/products/cg4w7lfcx8aFqitxS9vzPmmwIEmQIyliNaQrpXnZ.jpg?w=512', category: 'ソフト系', reservationType: 'both', todayStock: 12, advanceStock: 8 },
-    { id: 8, name: 'おさとうぱん', price: 173, image: 'https://d1umvcecpsu7ql.cloudfront.net/storage/uploads/products/YsSrL42LOxBFicet4kSfckSix7eDRPlsfAQSUL8Q.jpg?w=512', category: 'ソフト系', reservationType: 'both', todayStock: 7, advanceStock: 7 },
-    { id: 9, name: 'ほいっぷサンド', price: 227, image: 'https://d1umvcecpsu7ql.cloudfront.net/storage/uploads/products/jMe1jNgDtEjEi0elWdMNFXaqRRVHaVlCCSN9j5dV.jpg?w=512', category: 'ソフト系', reservationType: 'both', todayStock: 0, advanceStock: 3 },
-    { id: 10, name: 'チョコレートほいっぷサンド', price: 227, image: 'https://d1umvcecpsu7ql.cloudfront.net/storage/uploads/products/mMigc2JQ3o748o16qRLkB4xnidtlfbynYLEjnioq.jpg?w=512', category: 'ソフト系', reservationType: 'both', todayStock: 1, advanceStock: 4 },
-    { id: 11, name: 'ぼうしぱん', price: 248, image: 'https://d1umvcecpsu7ql.cloudfront.net/storage/uploads/products/JhctqRKT4Z2ZEjeYy7XXws6nMlRTZJIdDHfoK9An.jpg?w=512', category: 'ソフト系', reservationType: 'both', todayStock: 3, advanceStock: 4 },
-    { id: 12, name: 'ハムぱん', price: 227, image: 'https://d1umvcecpsu7ql.cloudfront.net/storage/uploads/products/VT63lVHEOM0pE475ISiPQ9evmX66svUCGWSSdfNj.jpg?w=512', category: 'ソフト系', reservationType: 'both', todayStock: 4, advanceStock: 5 },
-    { id: 13, name: 'うぃんなーぱん', price: 151, image: 'https://d1umvcecpsu7ql.cloudfront.net/storage/uploads/products/EmQkuAM4LW2y6TUMRSadXXGsoowZPWInDQJG39yL.jpg?w=512', category: 'ソフト系', reservationType: 'both', todayStock: 6, advanceStock: 5 },
-    { id: 14, name: 'コーンぱん', price: 205, image: 'https://d1umvcecpsu7ql.cloudfront.net/storage/uploads/products/TXtRipMOdycgXTtrFD0oIiH4CdVmPulQi61Vn95i.jpg?w=512', category: 'ソフト系', reservationType: 'both', todayStock: 0, advanceStock: 2 },
-    { id: 15, name: 'マヨたまぱん', price: 248, image: 'https://d1umvcecpsu7ql.cloudfront.net/storage/uploads/products/AZ7cjJcJuJfGAvYcZlUugwFqwzqU2BQrhFOPva5d.jpg?w=512', category: 'ソフト系', reservationType: 'both', todayStock: 8, advanceStock: 5 },
-    { id: 16, name: '焼きカレーパン', price: 248, image: 'https://d1umvcecpsu7ql.cloudfront.net/storage/uploads/products/4P5u73i54Q8Q9zFwCeG9JzJnuwTM9qsBq1DTv8uQ.jpg?w=512', category: 'ソフト系', reservationType: 'both', todayStock: 2, advanceStock: 2 },
-    { id: 17, name: 'あんばたーサンド', price: 259, image: 'https://d1umvcecpsu7ql.cloudfront.net/storage/uploads/products/JOgv0eyvwZUkzIfxIsGs6tpuT8HnJrVBJqExxBFu.jpg?w=512', category: 'ソフト系', reservationType: 'both', todayStock: 0, advanceStock: 1 },
-    { id: 18, name: 'ベーコンチーズぱん', price: 227, image: 'https://d1umvcecpsu7ql.cloudfront.net/storage/uploads/products/EpphBRlMEYA7sNH9Rutk6BLhmLFWKIv7QfBd5zeH.jpg?w=512', category: 'ソフト系', reservationType: 'both', todayStock: 9, advanceStock: 7 },
-    // ハード系
-    { id: 19, name: 'バゲット(L)', price: 399, image: 'https://d1umvcecpsu7ql.cloudfront.net/storage/uploads/products/UvNuQlC805L424NQvJHFvv7RIZdpHWZh9v3Fdf1h.jpg?w=512', category: 'ハード系', reservationType: 'both', todayStock: 2, advanceStock: 3 },
-    { id: 20, name: 'バゲット(S)', price: 261, image: 'https://d1umvcecpsu7ql.cloudfront.net/storage/uploads/products/lCwhcCJie57BeFIc3wn9G5Fm1bDJ4iHLwEam68gG.jpg?w=512', category: 'ハード系', reservationType: 'both', todayStock: 4, advanceStock: 4 },
-    { id: 21, name: 'フィセル', price: 281, image: 'https://d1umvcecpsu7ql.cloudfront.net/storage/uploads/products/bqeNeWVr000UCmcpmfpJzwUEnY48ozFcFzL2e3Dd.jpg?w=512', category: 'ハード系', reservationType: 'both', todayStock: 1, advanceStock: 2 },
-    { id: 22, name: 'プチちょこ', price: 173, image: 'https://d1umvcecpsu7ql.cloudfront.net/storage/uploads/products/IjdAyVvejkkLyDhbme3zmB21HJhZeQRKGgaGeSP2.jpg?w=512', category: 'ハード系', reservationType: 'both', todayStock: 7, advanceStock: 5 },
-    { id: 23, name: '小倉フランス', price: 173, image: 'https://d1umvcecpsu7ql.cloudfront.net/storage/uploads/products/FD4K0HqU5CillmtO6vRPiW76dTd89p90rij4zyZV.jpg?w=512', category: 'ハード系', reservationType: 'both', todayStock: 3, advanceStock: 4 },
-    { id: 24, name: 'しおバター', price: 335, image: 'https://d1umvcecpsu7ql.cloudfront.net/storage/uploads/products/wdugFVM6K4rmiRgMnLBYVXtDxzMh2OG5Sh5sQURT.jpg?w=512', category: 'ハード系', reservationType: 'both', todayStock: 0, advanceStock: 0 },
-    { id: 25, name: 'シュガーバター', price: 335, image: 'https://d1umvcecpsu7ql.cloudfront.net/storage/uploads/products/Sq68sid2EoKQ1mLaf32HoNCqWq0Jhc9FJCdpWtvz.jpg?w=512', category: 'ハード系', reservationType: 'both', todayStock: 2, advanceStock: 2 },
-    { id: 26, name: 'じゃがちー', price: 389, image: 'https://d1umvcecpsu7ql.cloudfront.net/storage/uploads/products/ngMjWBnePmB9R7uIF5GSQMJOPd8qv8UPFs7BNR8A.jpg?w=512', category: 'ハード系', reservationType: 'both', todayStock: 1, advanceStock: 1 },
-    { id: 27, name: 'ベーコンエピ', price: 410, image: 'https://d1umvcecpsu7ql.cloudfront.net/storage/uploads/products/mnl9RL1FYtaMhT62rnnGx5ip1JaXjM5ivbONucwd.jpg?w=512', category: 'ハード系', reservationType: 'both', todayStock: 3, advanceStock: 3 },
-    { id: 28, name: 'くるみレーズンバター', price: 335, image: 'https://d1umvcecpsu7ql.cloudfront.net/storage/uploads/products/gl7f2sDN0zK49NJ2KOU6xfC7gcDx1JipsoEceBOO.jpg?w=512', category: 'ハード系', reservationType: 'both', todayStock: 0, advanceStock: 1 },
-    { id: 29, name: 'くるみレーズンばとん', price: 313, image: 'https://d1umvcecpsu7ql.cloudfront.net/storage/uploads/products/ZG4PvP7J8BmzyuhyAhzZU8svYtB03v4ifF03fdbs.jpg?w=512', category: 'ハード系', reservationType: 'both', todayStock: 5, advanceStock: 4 },
-    { id: 30, name: 'クランベリーバター', price: 335, image: 'https://d1umvcecpsu7ql.cloudfront.net/storage/uploads/products/AUiBX7rMDszXeOtucL3eUCMfR1Vnut7Gz7Ltwf2h.jpg?w=512', category: 'ハード系', reservationType: 'both', todayStock: 2, advanceStock: 3 },
-    { id: 31, name: 'クランベリーばとん', price: 313, image: 'https://d1umvcecpsu7ql.cloudfront.net/storage/uploads/products/OTRqzpMRrCXxle3pdrpq57OHF8kupSK7AtuD6tzW.jpg?w=512', category: 'ハード系', reservationType: 'both', todayStock: 6, advanceStock: 5 }
-  ];
-
-  // 商品の保存
-  const saveProducts = (updatedProducts: Product[]) => {
-    setProducts(updatedProducts);
-    localStorage.setItem('bakery_products', JSON.stringify(updatedProducts));
-  };
-
-  // フィルタリング
-  const filteredProducts = products.filter(product => {
-    const matchesCategory = selectedCategory === 'all' || product.category === selectedCategory;
-    const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
-
-  // フォームリセット
-  const resetForm = () => {
-    setFormData({
-      name: '',
-      price: '',
-      category: 'ソフト系',
-      reservationType: 'both',
-      todayStock: '',
-      advanceStock: '',
-      image: ''
-    });
-    setEditingProduct(null);
-    setShowAddModal(false);
-  };
-
-  // 商品追加・編集
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    const productData = {
-      name: formData.name,
-      price: parseInt(formData.price),
-      category: formData.category,
-      reservationType: formData.reservationType,
-      todayStock: parseInt(formData.todayStock),
-      advanceStock: parseInt(formData.advanceStock),
-      image: formData.image || 'https://readdy.ai/api/search-image?query=delicious%20bakery%20bread%20product%20simple%20white%20background%20clean%20minimalist%20style%20high%20quality%20food%20photography&width=400&height=400&seq=bread-default&orientation=squarish'
+  /** ===== Filtered list ===== */
+  const filtered = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    const byCategory = (p: Product) => {
+      if (selectedCategory === 'すべて' || selectedCategory === 'all') return true;
+      return p.category === selectedCategory;
     };
+    const byTerm = (p: Product) =>
+      !term ||
+      p.name.toLowerCase().includes(term) ||
+      (p.category ?? '').toLowerCase().includes(term);
+    return products.filter((p) => byCategory(p) && byTerm(p));
+  }, [products, selectedCategory, searchTerm]);
 
-    let updatedProducts;
-    if (editingProduct) {
-      // 編集
-      updatedProducts = products.map(p => 
-        p.id === editingProduct.id ? { ...p, ...productData } : p
+  /** ===== Bulk stock (no page reload, optimistic) ===== */
+  const handleBulkStockUpdate = async (type: 'today' | 'advance', value: 1 | -1) => {
+    setIsBulkLoading(true);
+    try {
+      const cat = apiCategoryFromSelected(selectedCategory);
+
+      // optimistic
+      setProducts((cur) =>
+        cur.map((p) => {
+          if (cat === 'soft' && p.category !== 'ソフト系') return p;
+          if (cat === 'hard' && p.category !== 'ハード系') return p;
+          const key = type === 'today' ? 'today_stock' : 'advance_stock';
+          const next = Math.max(0, (p as any)[key] + value);
+          return { ...p, [key]: next };
+        })
       );
-    } else {
-      // 追加
-      const newId = Math.max(...products.map(p => p.id)) + 1;
-      updatedProducts = [...products, { id: newId, ...productData }];
+
+      const res = await fetch('/api/bulk-stock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          category: cat, // 'all' | 'soft' | 'hard'
+          target: type === 'today' ? 'today' : 'preorder',
+          delta: value,
+        }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.message || j.error || 'bulk api error');
+
+      await fetchProducts(); // sync to server
+    } catch (e) {
+      console.error(e);
+      alert('在庫一括更新に失敗しました');
+      await fetchProducts(); // rollback
+    } finally {
+      setIsBulkLoading(false);
     }
-
-    saveProducts(updatedProducts);
-    resetForm();
   };
 
-  // 商品削除
-  const handleDelete = (id: number) => {
-    if (confirm('この商品を削除しますか？')) {
-      const updated = products.filter(p => p.id !== id);
-      saveProducts(updated);
+  /** ===== Per-product quick stock adjust ===== */
+  const adjustOne = async (p: Product, which: 'today' | 'advance', diff: 1 | -1) => {
+    // optimistic
+    setProducts((cur) =>
+      cur.map((x) => {
+        if (x.id !== p.id) return x;
+        const key = which === 'today' ? 'today_stock' : 'advance_stock';
+        const next = Math.max(0, (x as any)[key] + diff);
+        return { ...x, [key]: next };
+      })
+    );
+    try {
+      const body =
+        which === 'today'
+          ? { today_stock: Math.max(0, (p.today_stock ?? 0) + diff) }
+          : { advance_stock: Math.max(0, (p.advance_stock ?? 0) + diff) };
+
+      const res = await fetch(`/api/products/${p.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error('patch failed');
+      await fetchProducts();
+    } catch (e) {
+      console.error(e);
+      alert('在庫更新に失敗しました');
+      await fetchProducts();
     }
   };
 
-  // 在庫一括調整
-  const handleBulkStockUpdate = (type: 'today' | 'advance', value: number) => {
-    const updated = products.map(p => ({
-      ...p,
-      [type === 'today' ? 'todayStock' : 'advanceStock']: 
-        Math.max(0, (type === 'today' ? p.todayStock : p.advanceStock) + value)
-    }));
-    saveProducts(updated);
+  /** ===== Edit modal submit ===== */
+  const submitEdit = async () => {
+    if (!editTarget) return;
+    try {
+      const res = await fetch(`/api/products/${editTarget.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editForm.name,
+          price: Number(editForm.price),
+          category: editForm.category, // 日本語でOK（API側で正規化）
+          reservation_type: editForm.reservation_type,
+          today_stock: Number(editForm.today_stock),
+          advance_stock: Number(editForm.advance_stock),
+        }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error || 'update failed');
+
+      // optimistic merge
+      setProducts((cur) => cur.map((x) => (x.id === editTarget.id ? normalize(j.data ?? x) : x)));
+
+      setEditTarget(null);
+      await fetchProducts();
+    } catch (e) {
+      console.error(e);
+      alert('更新に失敗しました');
+    }
   };
 
-  // 編集開始
-  const startEdit = (product: Product) => {
-    setEditingProduct(product);
-    setFormData({
-      name: product.name,
-      price: product.price.toString(),
-      category: product.category,
-      reservationType: product.reservationType,
-      todayStock: product.todayStock.toString(),
-      advanceStock: product.advanceStock.toString(),
-      image: product.image
-    });
-    setShowAddModal(true);
-  };
-
-  const categories = ['all', 'ソフト系', 'ハード系'];
-  const categoryLabels = { 'all': 'すべて', 'ソフト系': 'ソフト系', 'ハード系': 'ハード系' };
-
+  /** ===== UI ===== */
   return (
-    <div className="space-y-8">
-      {/* ヘッダーとアクション */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-800 mb-2">商品・在庫管理</h2>
-            <p className="text-gray-600">商品の追加・編集・削除、在庫調整を行います</p>
-          </div>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="flex items-center px-6 py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold transition-colors cursor-pointer whitespace-nowrap"
-          >
-            <i className="ri-add-line mr-2"></i>
-            新商品追加
-          </button>
-        </div>
+    <div className="space-y-6">
+      <h2 className="text-xl font-bold">商品・在庫管理</h2>
+      <p className="text-gray-500">商品の追加・編集・削除、在庫調整を行います</p>
 
-        {/* 一括在庫調整 */}
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
-          <h3 className="text-blue-800 font-semibold mb-3 flex items-center">
-            <i className="ri-stack-line mr-2"></i>
-            一括在庫調整
-          </h3>
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => handleBulkStockUpdate('today', -1)}
-              className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-sm cursor-pointer whitespace-nowrap"
-            >
-              当日在庫 -1
-            </button>
-            <button
-              onClick={() => handleBulkStockUpdate('today', 1)}
-              className="px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded text-sm cursor-pointer whitespace-nowrap"
-            >
-              当日在庫 +1
-            </button>
-            <button
-              onClick={() => handleBulkStockUpdate('advance', -1)}
-              className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-sm cursor-pointer whitespace-nowrap"
-            >
-              事前在庫 -1
-            </button>
-            <button
-              onClick={() => handleBulkStockUpdate('advance', 1)}
-              className="px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded text-sm cursor-pointer whitespace-nowrap"
-            >
-              事前在庫 +1
-            </button>
-          </div>
-        </div>
+      <div className="flex justify-end mb-4">
+  <Link
+    href="/admin/products/new"
+    className="inline-flex items-center rounded-md border px-3 py-2 text-sm font-medium hover:bg-gray-50"
+  >
+    新規追加
+  </Link>
+</div>
 
-        {/* 検索とフィルタ */}
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1">
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="商品名で検索..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"
-              />
-              <i className="ri-search-line absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            {categories.map((category) => (
-              <button
-                key={category}
-                onClick={() => setSelectedCategory(category)}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors cursor-pointer whitespace-nowrap ${
-                  selectedCategory === category
-                    ? 'bg-amber-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                {categoryLabels[category as keyof typeof categoryLabels]}
-              </button>
-            ))}
-          </div>
+
+      {/* 一括在庫調整 */}
+      <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+        <div className="mb-3 flex items-center gap-2">
+          <h3 className="text-blue-800 font-semibold text-base">一括在庫調整</h3>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" disabled={isBulkLoading}
+            onClick={(e)=>{e.preventDefault();e.stopPropagation();handleBulkStockUpdate('today',-1);}}
+            className="px-3 py-2 rounded bg-red-600 hover:bg-red-700 text-white text-sm">当日在庫 -1</button>
+          <button type="button" disabled={isBulkLoading}
+            onClick={(e)=>{e.preventDefault();e.stopPropagation();handleBulkStockUpdate('today',+1);}}
+            className="px-3 py-2 rounded bg-green-600 hover:bg-green-700 text-white text-sm">当日在庫 +1</button>
+          <button type="button" disabled={isBulkLoading}
+            onClick={(e)=>{e.preventDefault();e.stopPropagation();handleBulkStockUpdate('advance',-1);}}
+            className="px-3 py-2 rounded bg-red-600 hover:bg-red-700 text-white text-sm">事前在庫 -1</button>
+          <button type="button" disabled={isBulkLoading}
+            onClick={(e)=>{e.preventDefault();e.stopPropagation();handleBulkStockUpdate('advance',+1);}}
+            className="px-3 py-2 rounded bg-green-600 hover:bg-green-700 text-white text-sm">事前在庫 +1</button>
+        </div>
+      </div>
+
+      {/* 検索 & フィルタ */}
+      <div className="flex flex-col md:flex-row gap-3">
+        <div className="flex-1">
+          <input
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="商品名で検索…"
+            className="w-full rounded border px-3 py-2"
+          />
+        </div>
+        <div className="flex gap-2">
+          <button type="button"
+            className={`px-4 py-2 rounded border ${selectedCategory==='すべて'?'bg-gray-800 text-white':''}`}
+            onClick={()=>setSelectedCategory('すべて')}>すべて</button>
+          <button type="button"
+            className={`px-4 py-2 rounded border ${selectedCategory==='ソフト系'?'bg-amber-600 text-white':''}`}
+            onClick={()=>setSelectedCategory('ソフト系')}>ソフト系</button>
+          <button type="button"
+            className={`px-4 py-2 rounded border ${selectedCategory==='ハード系'?'bg-amber-600 text-white':''}`}
+            onClick={()=>setSelectedCategory('ハード系')}>ハード系</button>
         </div>
       </div>
 
       {/* 商品一覧 */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-800">
-            商品一覧 ({filteredProducts.length}商品)
-          </h3>
-        </div>
+      <div className="rounded-xl border">
+        <div className="px-4 py-3 border-b font-semibold">商品一覧（{filtered.length}商品）</div>
+        {isLoading ? (
+          <div className="p-6 text-gray-500">読み込み中…</div>
+        ) : filtered.length === 0 ? (
+          <div className="p-6 text-gray-500">該当する商品がありません</div>
+        ) : (
+          <ul className="divide-y">
+            {filtered.map((p) => (
+              <li key={p.id} className="px-4 py-3 flex items-center gap-4">
+                {/* 画像 */}
+                {p.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={p.image} alt="" className="h-12 w-12 rounded object-cover" />
+                ) : (
+                  <div className="h-12 w-12 rounded bg-gray-200" />
+                )}
 
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">商品</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">価格</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">当日在庫</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">事前在庫</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">予約タイプ</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">アクション</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {filteredProducts.map((product) => (
-                <tr key={product.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4">
-                    <div className="flex items-center">
-                      <img
-                        src={product.image}
-                        alt={product.name}
-                        className="w-12 h-12 rounded-lg object-cover mr-3"
-                      />
-                      <div>
-                        <p className="font-medium text-gray-900">{product.name}</p>
-                        <p className="text-sm text-gray-500">{product.category}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                    ¥{product.price.toLocaleString()}
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${
-                      product.todayStock === 0 
-                        ? 'bg-red-100 text-red-800' 
-                        : product.todayStock <= 3
-                        ? 'bg-yellow-100 text-yellow-800'
-                        : 'bg-green-100 text-green-800'
-                    }`}>
-                      {product.todayStock}個
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${
-                      product.advanceStock === 0 
-                        ? 'bg-red-100 text-red-800' 
-                        : product.advanceStock <= 3
-                        ? 'bg-yellow-100 text-yellow-800'
-                        : 'bg-green-100 text-green-800'
-                    }`}>
-                      {product.advanceStock}個
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                      product.reservationType === 'both' 
-                        ? 'bg-blue-100 text-blue-800' 
-                        : product.reservationType === 'today'
-                        ? 'bg-orange-100 text-orange-800'
-                        : 'bg-purple-100 text-purple-800'
-                    }`}>
-                      {product.reservationType === 'both' ? '両方' : 
-                       product.reservationType === 'today' ? '当日のみ' : '事前のみ'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() => startEdit(product)}
-                        className="w-8 h-8 flex items-center justify-center text-blue-600 hover:bg-blue-50 rounded-full transition-colors cursor-pointer"
-                        title="編集"
-                      >
-                        <i className="ri-edit-line"></i>
-                      </button>
-                      <button
-                        onClick={() => handleDelete(product.id)}
-                        className="w-8 h-8 flex items-center justify-center text-red-600 hover:bg-red-50 rounded-full transition-colors cursor-pointer"
-                        title="削除"
-                      >
-                        <i className="ri-delete-bin-line"></i>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                {/* 情報 */}
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium">{p.name}</div>
+                  <div className="text-xs text-gray-500">
+                    <span className="ml-1 rounded bg-gray-100 px-2 py-0.5 text-[11px]">
+  予約:{reserveLabel(p.reservation_type)}
+</span>
 
-      {/* 商品追加・編集モーダル */}
-      {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-screen overflow-y-auto">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-semibold">
-                {editingProduct ? '商品編集' : '新商品追加'}
-              </h3>
-              <button
-                onClick={resetForm}
-                className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 cursor-pointer"
-              >
-                <i className="ri-close-line"></i>
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">商品名</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.name}
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">価格 (円)</label>
-                <input
-                  type="number"
-                  required
-                  min="0"
-                  value={formData.price}
-                  onChange={(e) => setFormData({...formData, price: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">カテゴリー</label>
-                <select
-                  value={formData.category}
-                  onChange={(e) => setFormData({...formData, category: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 pr-8"
-                >
-                  <option value="ソフト系">ソフト系</option>
-                  <option value="ハード系">ハード系</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">予約タイプ</label>
-                <select
-                  value={formData.reservationType}
-                  onChange={(e) => setFormData({...formData, reservationType: e.target.value as any})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 pr-8"
-                >
-                  <option value="both">両方</option>
-                  <option value="today">当日のみ</option>
-                  <option value="advance">事前のみ</option>
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">当日在庫</label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    value={formData.todayStock}
-                    onChange={(e) => setFormData({...formData, todayStock: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"
-                  />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">事前在庫</label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    value={formData.advanceStock}
-                    onChange={(e) => setFormData({...formData, advanceStock: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"
-                  />
+
+                {/* 在庫表示＋クイック± */}
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-gray-500">当日</span>
+                  <span className="rounded-full bg-yellow-100 px-3 py-1 text-sm">{p.today_stock ?? 0}個</span>
+                  <div className="flex gap-1">
+                    <button type="button" className="px-2 text-xs border rounded"
+                      onClick={()=>adjustOne(p,'today',-1)}>-1</button>
+                    <button type="button" className="px-2 text-xs border rounded"
+                      onClick={()=>adjustOne(p,'today',+1)}>+1</button>
+                  </div>
+
+                  <span className="ml-2 text-xs text-gray-500">事前</span>
+                  <span className="rounded-full bg-green-100 px-3 py-1 text-sm">{p.advance_stock ?? 0}個</span>
+                  <div className="flex gap-1">
+                    <button type="button" className="px-2 text-xs border rounded"
+                      onClick={()=>adjustOne(p,'advance',-1)}>-1</button>
+                    <button type="button" className="px-2 text-xs border rounded"
+                      onClick={()=>adjustOne(p,'advance',+1)}>+1</button>
+                  </div>
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">画像URL（省略可）</label>
-                <input
-                  type="url"
-                  value={formData.image}
-                  onChange={(e) => setFormData({...formData, image: e.target.value})}
-                  placeholder="https://example.com/image.jpg"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">空欄の場合はデフォルト画像を使用</p>
-              </div>
-
-              <div className="flex gap-3 pt-4">
+                {/* 編集ボタン */}
                 <button
                   type="button"
-                  onClick={resetForm}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 cursor-pointer whitespace-nowrap"
+                  className="ml-4 px-2 py-1 text-xs rounded border"
+                  onClick={() => {
+                    setEditTarget(p);
+                    setEditForm({
+                      name: p.name,
+                      price: p.price,
+                      category: p.category as any,
+                      reservation_type: p.reservation_type,
+                      today_stock: p.today_stock ?? 0,
+                      advance_stock: p.advance_stock ?? 0,
+                    });
+                  }}
                 >
-                  キャンセル
+                  編集
                 </button>
-                <button
-                  type="submit"
-                  className="flex-1 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg cursor-pointer whitespace-nowrap"
-                >
-                  {editingProduct ? '更新' : '追加'}
-                </button>
-              </div>
-            </form>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* 編集モーダル */}
+      {editTarget && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-4 w-[min(560px,92vw)]">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="font-semibold">商品を編集</h3>
+              <button type="button" onClick={() => setEditTarget(null)}>✕</button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <label className="col-span-2">
+                <div className="text-xs text-gray-500 mb-1">商品名</div>
+                <input className="w-full border rounded px-2 py-1"
+                  value={editForm.name}
+                  onChange={(e)=>setEditForm(f=>({...f, name:e.target.value}))}/>
+              </label>
+
+              <label>
+                <div className="text-xs text-gray-500 mb-1">価格</div>
+                <input type="number" className="w-full border rounded px-2 py-1"
+                  value={editForm.price}
+                  onChange={(e)=>setEditForm(f=>({...f, price:Number(e.target.value||0)}))}/>
+              </label>
+
+              <label>
+                <div className="text-xs text-gray-500 mb-1">カテゴリ</div>
+                <select className="w-full border rounded px-2 py-1"
+                  value={editForm.category}
+                  onChange={(e)=>setEditForm(f=>({...f, category:e.target.value}))}>
+                  <option>ソフト系</option>
+                  <option>ハード系</option>
+                </select>
+              </label>
+
+              <label>
+                <div className="text-xs text-gray-500 mb-1">予約タイプ</div>
+                <select className="w-full border rounded px-2 py-1"
+                  value={editForm.reservation_type}
+                  onChange={(e)=>setEditForm(f=>({...f, reservation_type:e.target.value as ReservationType}))}>
+                  <option value="both">両方</option>
+                  <option value="today">当日</option>
+                  <option value="advance">事前</option>
+                </select>
+              </label>
+
+              <label>
+                <div className="text-xs text-gray-500 mb-1">当日在庫</div>
+                <input type="number" className="w-full border rounded px-2 py-1"
+                  value={editForm.today_stock}
+                  onChange={(e)=>setEditForm(f=>({...f, today_stock:Number(e.target.value||0)}))}/>
+              </label>
+
+              <label>
+                <div className="text-xs text-gray-500 mb-1">事前在庫</div>
+                <input type="number" className="w-full border rounded px-2 py-1"
+                  value={editForm.advance_stock}
+                  onChange={(e)=>setEditForm(f=>({...f, advance_stock:Number(e.target.value||0)}))}/>
+              </label>
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" className="px-3 py-2 border rounded" onClick={()=>setEditTarget(null)}>キャンセル</button>
+              <button type="button" className="px-3 py-2 rounded bg-blue-600 text-white" onClick={submitEdit}>
+                保存
+              </button>
+            </div>
           </div>
         </div>
       )}
     </div>
   );
 }
+

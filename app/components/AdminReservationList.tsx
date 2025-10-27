@@ -454,7 +454,10 @@ export default function AdminReservationList() {
                         ))}
                         <div className="border-t border-gray-200 mt-2 pt-2 flex justify-between font-medium">
                           <span>合計</span>
-                          <span className="text-amber-600">¥{r.totalPrice.toLocaleString()}</span>
+                          <span className="text-amber-600">
+  ¥{r.totalPrice ? r.totalPrice.toLocaleString() : 0}
+</span>
+
                         </div>
                       </div>
                     </td>

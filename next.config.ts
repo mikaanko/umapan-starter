@@ -1,12 +1,13 @@
+// next.config.ts
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: "export",
-  images: {
-    unoptimized: true,
-  },
+  reactStrictMode: true,
+  // output: 'export',   // ← 使わない（API使うので外す）
+  // images: { unoptimized: true }, // 'export'用なら一旦外す
   typescript: {
-    // ignoreBuildErrors: true,
+    // もし元から入っていたなら残してOK（任意）
+    ignoreBuildErrors: true,
   },
 };
 

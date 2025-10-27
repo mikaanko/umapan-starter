@@ -1,9 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import AdminReservationList from '@/app/components/AdminReservationList';
+import AdminReservationList from "@/components/AdminReservationList";
+import CsvExport from "./components/CsvExport";  // ← これはこのままでOK（/app/admin/components/CsvExport.tsx）
+import ProductManagement from "@/components/ProductManagement";
+
 
 type TabKey = 'reservations' | 'products' | 'holiday' | 'reports' | 'customers';
+
 
 const TABS: { key: TabKey; label: string; icon?: string }[] = [
   { key: 'reservations', label: '予約管理', icon: 'ri-booklet-line' },
@@ -49,19 +53,24 @@ export default function AdminPage() {
       </div>
 
       {/* タブ内容 */}
-      {active === 'reservations' && (
-        <AdminReservationList />
-      )}
+      {/* ▼ コンテンツ */}
+{active === "reservations" && (
+  <>
+    {/* CSVダウンロード */}
+    <div className="mb-3">
+      <CsvExport />
+    </div>
 
-      {active === 'products' && (
-        <SectionShell title="商品・在庫管理">
-          <p className="text-gray-600">ここに「商品一覧」「在庫数の一括更新」「並び順」などを置きます。</p>
-          <ul className="list-disc pl-6 mt-2 text-gray-600 text-sm">
-            <li>（あとで）<code>app/components/AdminProductList.tsx</code> を読み込む</li>
-            <li>（あとで）CSV インポート／エクスポート</li>
-          </ul>
-        </SectionShell>
-      )}
+    {/* 予約一覧 */}
+    <AdminReservationList />
+  </>
+)}
+
+     {active === 'products' && (
+  <SectionShell title="商品・在庫管理">
+    <ProductManagement />
+  </SectionShell>
+)}
 
       {active === 'holiday' && (
         <SectionShell title="休業日設定">
