@@ -1,38 +1,41 @@
-'use client';
-import React from 'react';
+"use client";
 
-type Props = {
-  value?: string; // '2025-11-03' みたいなISO文字列想定
-  onChange: (v: string) => void;
-  daysAhead?: number; // 何日先まで予約できるか
-  sameDayOnly?: boolean; // 当日取り置きモードならtrue
+import React from "react";
+
+type DatePickerProps = {
+  selectedDate: string; // 例: "2025-11-03"
+  onChangeDate: (next: string) => void;
+  daysAhead?: number; // 何日先まで予約できるか (sameDayOnly=falseのときに使う)
+  sameDayOnly?: boolean; // trueなら「当日お取り置き」モードで今日だけ
 };
 
 export default function DatePicker({
-  value,
-  onChange,
+  selectedDate,
+  onChangeDate,
   daysAhead = 14,
   sameDayOnly = false,
-}: Props) {
-  // 今日の日付を基準にリストをつくる
+}: DatePickerProps) {
+  // ボタン用の日付リストを作る
+  // [{ label: "11/3 (日)", iso: "2025-11-03" }, ...]
   const today = new Date();
 
-  const options: { label: string; iso: string }[] = [];
-  const limit = sameDayOnly ? 0 : daysAhead;
+  // 当日お取り置きなら1日分だけ、それ以外はdaysAhead+1日分
+  const limit = sameDayOnly ? 1 : daysAhead + 1;
 
-  for (let i = 0; i <= limit; i++) {
+  const options: { label: string; iso: string }[] = [];
+  for (let i = 0; i < limit; i++) {
     const d = new Date(today);
     d.setDate(today.getDate() + i);
 
     const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
 
-    // 表示用ラベル（例: "11/3 (日)"）
-    const weekday = ['日', '月', '火', '水', '木', '金', '土'][d.getDay()];
+    // 曜日ラベル
+    const weekday = "日月火水木金土"[d.getDay()];
     const label = `${Number(mm)}/${Number(dd)} (${weekday})`;
 
-    // 値として使うISOライクな"2025-11-03"
+    // ISOっぽい値 "2025-11-03"
     const iso = `${yyyy}-${mm}-${dd}`;
 
     options.push({ label, iso });
@@ -43,11 +46,11 @@ export default function DatePicker({
       {options.map((opt) => (
         <button
           key={opt.iso}
-          onClick={() => onChange(opt.iso)}
+          onClick={() => onChangeDate(opt.iso)}
           className={`py-2 rounded-lg border text-sm text-center ${
-            value === opt.iso
-              ? 'bg-orange-500 text-white border-orange-500'
-              : 'bg-white hover:bg-orange-50 border-gray-300'
+            selectedDate === opt.iso
+              ? "bg-orange-500 text-white border-orange-500"
+              : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
           }`}
         >
           {opt.label}
