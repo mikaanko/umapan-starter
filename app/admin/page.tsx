@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import AdminReservationList from "@/components/AdminReservationList";
 import CsvExport from "./components/CsvExport";  // ← これはこのままでOK（/app/admin/components/CsvExport.tsx）
 import ProductManagement from "@/components/ProductManagement";
@@ -58,7 +58,7 @@ export default function AdminPage() {
   <>
     {/* CSVダウンロード */}
     <div className="mb-3">
-      <CsvExport />
+      <Suspense fallback={null}><CsvExport /></Suspense>
     </div>
 
     {/* 予約一覧 */}
