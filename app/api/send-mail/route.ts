@@ -14,10 +14,8 @@ type ReservationPayload = {
   status: string; items: Item[]; total_price?: number;
 };
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
-const FROM = process.env.MAIL_FROM!;
-const SHOP_TO = process.env.MAIL_SHOP_TO!;
+const FROM = process.env.MAIL_FROM || "onboarding@resend.dev";
+const SHOP_TO = process.env.MAIL_SHOP_TO || "owner@example.com";
 
 function fmtYen(n: number) { return n.toLocaleString("ja-JP"); }
 function calcSubtotal(items: Item[]) {
@@ -64,12 +62,15 @@ function shopHtml(r: ReservationPayload, total: number) {
 
 export async function POST(req: NextRequest) {
   try {
-    if (!process.env.RESEND_API_KEY || !FROM || !SHOP_TO) {
+    const resendKey = process.env.RESEND_API_KEY;
+    if (!resendKey || !FROM || !SHOP_TO) {
       console.error("[send-mail] Missing env", {
         hasKey: !!process.env.RESEND_API_KEY, FROM, SHOP_TO
       });
       return NextResponse.json({ ok: false, error: "Missing env" }, { status: 500 });
     }
+
+    const resend = new Resend(resendKey);
 
     const r = (await req.json()) as ReservationPayload;
     const total = typeof r.total_price === "number" ? r.total_price : calcSubtotal(r.items);
